@@ -221,11 +221,45 @@ static NTSTATUS NTAPI HookNtContinue(
     IN PCONTEXT Context,
     BOOLEAN RaiseAlert)
 {
-    typedef NTSTATUS (NTAPI *NTCONTINUE) (
-        IN PCONTEXT Context,
-        BOOLEAN RaiseAlert
-    );
-    return ((NTCONTINUE)hNtContinue->SSDTaddress)(Context, RaiseAlert);
+    /*
+        ULONG_PTR addr = hNtContinue->SSDTaddress;
+    ULONG pid=(ULONG)PsGetCurrentProcessId();
+    bool IsHidden=HiderIsHidden(pid, HideNtContinue);
+    if(IsHidden && (Context->ContextFlags & CONTEXT_DEBUG_REGISTERS)) {
+        Log("[TITANHIDE] NtContinue by %d\n", pid);
+        __asm {
+            mov     eax, [esp+4] //context
+            mov     dword ptr[eax+18h], 0 //dr7
+        }
+    }
+    NTSTATUS ret=Undocumented::NtContinue(Context, RaiseAlert);
+
+    return ret;*/
+    ULONG_PTR addr = hNtContinue->SSDTaddress;
+    __asm {
+        myntcontinue:
+        mov     eax, [esp+4]
+
+        push    offset sehhandle
+        push    dword ptr fs:[0]
+        mov     dword ptr fs:[0], esp
+        mov     dword ptr[eax+18h], 0
+
+        __safe:
+        pop     dword ptr fs:[0]
+        add     esp, 4
+        call [addr]
+
+
+        sehhandle:
+        mov     ecx, [esp+0ch]
+        push    dword ptr[esp+8]
+        pop     dword ptr[ecx+0c4h]
+        mov eax, offset __safe
+        mov     [ecx+0b8h], eax
+        xor     eax, eax
+        ret
+    }
 }
 
 int HooksInit()
